@@ -53,7 +53,7 @@ async def playlist(ctx):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'format': 'bestaudio/best',
         'ignoreerrors': True,
-        #saves list of downloaded songs to txt file, doesn't redownload, not currently used due to problems loading from file
+        #saves list of downloaded songs to txt file, doesn't redownload
         'download_archive': 'downloads/!downloads.txt',
         'playlistrandom': True,
         'postprocessors': [{
