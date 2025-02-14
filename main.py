@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 
 """ TBD, order of priority
     Test bot commands, skip might break if skipping last song and test title due to new implementation
-    Don't download already downloaded songs, separate command to update pl
     Doesn't properly check if user is in vc, runs and downloads songs w/o user being in vc
+    Might be done, requires testing -> Don't download already downloaded songs, separate command to update pl
     Create ReadMe
     Doesn't move to diff vc when reusing command
     Test adjusting max_workers to larger numbers for potential performance improvements
