@@ -7,12 +7,13 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 """ TBD, order of priority
+    Bot repeatedly joins and leaves vc when uhoh is called, no clue why lmao
+    In progress, might vaguely sort of work but ^ is preventing testing
+        Don't download already downloaded songs, separate command to update pl
     Test bot commands, skip might break if skipping last song and test title due to new implementation
-    Doesn't properly check if user is in vc, runs and downloads songs w/o user being in vc
-    Might be done, requires testing -> Don't download already downloaded songs, separate command to update pl
     Create ReadMe
-    Doesn't move to diff vc when reusing command
     Test adjusting max_workers to larger numbers for potential performance improvements
+    Test if intents need to be define or if they are covered by default
 
 Reference: https://github.com/SpaceCowboyZZ/music-bot-yt-dlp/blob/main/main.py
 if errors, change Mandy back to music bot in class declaration and in main()
@@ -35,9 +36,24 @@ executor = ThreadPoolExecutor(max_workers=4) #num of concurrent processes, used 
 PL = 'https://www.youtube.com/playlist?list=PLIJH8L_jdxO8ingMAyaOj4cuvZW4Or8l5'
 test= 'https://www.youtube.com/playlist?list=PLzFA48i-nuXYFLBJ86iFEuAeoH9yS3bRm'
 
+#settings for playlist downloads
+pl_opts = { #list of options https://github.com/ytdl-org/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L128-L278
+    'outtmpl': 'downloads/%(title)s.%(ext)s',
+    'format': 'bestaudio/best',
+    'ignoreerrors': True,
+    #saves list of downloaded songs to txt file, doesn't redownload
+    'download_archive': 'downloads/!downloads.txt',
+    'playlistrandom': True,
+    'postprocessors': [{
+    'key': 'FFmpegExtractAudio',
+    'preferredcodec': 'mp3',
+    'preferredquality': '192',
+    }]
+}
+
 #main method to load bad music pl
 async def doBad(ctx):
-    moveVC(ctx) 
+    await moveVC(ctx)
     await ctx.send(f'Making The Bad')
     #calls playlist method to move info about playlist into data1
     data1 = await playlist(ctx)
@@ -45,41 +61,71 @@ async def doBad(ctx):
     #lines up songs in queue and calls playNow()
     queue.extend(data)
     await playNow(ctx, data, url=queue.pop(0)) 
-
-#used for downloading playlist
-async def playlist(ctx):
-    #settings for playlist downloads
-    pl_opts = { #list of options https://github.com/ytdl-org/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L128-L278
-        'outtmpl': 'downloads/%(title)s.%(ext)s',
-        'format': 'bestaudio/best',
-        'ignoreerrors': True,
-        #saves list of downloaded songs to txt file, doesn't redownload
-        'download_archive': 'downloads/!downloads.txt',
-        'playlistrandom': True,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-            }]
-    }
     
+#used for downloading playlist
+'''async def playlist(ctx):
     playlist_search = yt_dlp.YoutubeDL(pl_opts)
     loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(executor, lambda: playlist_search.extract_info(url=PL, download=True))
+    data = await loop.run_in_executor(executor, lambda: playlist_search.extract_info(url=test, download=True))
+    data.append = await downloadLocal(ctx)
     data1 = []
+    if 'entries' in data:
+        data1 =[[entry['title'], entry['url']] for entry in data['entries']]
+    await ctx.send('returning data1')
+    return data1 #returns information of songs
+'''
+
+async def playlist(ctx):
+    playlist_search = yt_dlp.YoutubeDL(pl_opts)
+    loop = asyncio.get_event_loop()
+    data = await loop.run_in_executor(executor, lambda: playlist_search.extract_info(url=test, download=True))
+    local_songs = await downloadLocal(ctx)
+    data1 = []
+
     if 'entries' in data:
         for entry in data['entries']:
             if entry:
-                data1.append[[entry['title'], entry['url']]]
-            else:
                 title = entry['title']
                 url = f"downloads/{title}.mp3"
-                data1.append([title, url])
-    return data1 #returns information of songs
+                if os.path.exists(url):
+                    data1.append([title, url])
+                else:
+                    data1.append([entry['title'], entry['url']])
 
+    # Add local songs to data1
+    data1.extend(local_songs)
+
+    print('returning data1')
+    return data1  # returns information of songs
+
+#handles adding local songs to queue
+async def downloadLocal(ctx):
+    download_dir = 'downloads'
+    if not os.path.exists(download_dir):
+        print(f"Directory {download_dir} does not exist.")
+        return []
+
+    files = [os.path.join(download_dir, f) for f in os.listdir(download_dir) if os.path.isfile(os.path.join(download_dir, f))]
+    if not files:
+        print(f"No files found in {download_dir}.")
+        return []
+
+    # thePath = os.getenv('GORP')
+    local_songs = []
+    for file in files:
+        title = os.path.splitext(os.path.basename(file))[0]
+        if(title != '!downloads'):
+            # filepath = os.path.join(thePath, file)
+            # filepath = filepath.replace("\\", "/")
+            filepath = file.replace("\\", "/")
+            local_songs.append([title, filepath])
+
+    print(f"Found {len(local_songs)} local files in {download_dir}.")
+    return local_songs
+        
 #method used to start playing songs
 async def playNow(ctx, data, url):
-    moveVC(ctx)
+    await moveVC(ctx)
     ffmpeg_options = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}   
     bot.play_status = True
     #Recursive method for playing songs after prev song ends
@@ -89,26 +135,37 @@ async def playNow(ctx, data, url):
                 
         if queue:
             #If songs in queue, lines up next song then plays
-            title = f'{next_song[0]}'
             next_song = queue.pop(0)
-            ctx.voice_client.play(discord.FFmpegPCMAudio(next_song[1], **ffmpeg_options), after=lambda e: after(e))
+            title = f'{next_song[0]}'
+            ctx.voice_client.play(discord.FFmpegPCMAudio(executable="C:/ffmpeg/bin/ffmpeg.exe", source=next_song[1], **ffmpeg_options), after=lambda e: after(e))
         else:
             #if nothing in queue, reloads playlist from data and repeats
             queue.extend(data)
             next_song = queue.pop(0)
-            ctx.voice_client.play(discord.FFmpegPCMAudio(next_song[1], **ffmpeg_options), after=lambda e: after(e))
+            title = f'{next_song[0]}'
+            ctx.voice_client.play(discord.FFmpegPCMAudio(source=next_song[1], **ffmpeg_options), after=lambda e: after(e))
     #Starts playing of first song in queue
-    title = f'{url[1]}'
-    ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
+    print('starting voice_client.play')
+    print(url[0] + " url[0]")
+    print(url[1] + " url[1]")
+    ctx.voice_client.play(discord.FFmpegPCMAudio(source=url[1], **ffmpeg_options), after=lambda e: after(e))
     
 #moves bot to user's vc
 async def moveVC(ctx):
+    print('in moveVC')
     voice_channel = ctx.author.voice.channel if ctx.author.voice else None
     if not voice_channel:
-        return await ctx.send("Not in vc stinky")
-    if not ctx.voice_client:
-        await voice_channel.connect()   
+        print('moveVC if not voice_channel')
+        await ctx.send("Not in vc stinky")
 
+    if ctx.voice_client and ctx.voice_client.channel != voice_channel:
+        print('moveVC if ctx.voice_client')
+        await ctx.voice_client.move_to(voice_channel)
+
+    else:
+        print('moveVC else')
+        await voice_channel.connect()
+ 
 #main class of bot
 class Mandy(commands.Cog):
     def __init__(self, client):
