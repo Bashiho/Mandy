@@ -10,7 +10,8 @@ from dotenv import load_dotenv
     Bot repeatedly joins and leaves vc when uhoh is called, no clue why lmao
     In progress, might vaguely sort of work but ^ is preventing testing
         Don't download already downloaded songs, separate command to update pl
-    Test bot commands, skip might break if skipping last song and test title due to new implementation
+    Test skip, might break when skipping last song of playlist, intent is for it to reload playlist and continue playing so pl loops
+    Test title command
     Create ReadMe
     Test adjusting max_workers to larger numbers for potential performance improvements
     Test if intents need to be define or if they are covered by default
@@ -95,7 +96,7 @@ async def playlist(ctx):
     # Add local songs to data1
     data1.extend(local_songs)
 
-    print('returning data1')
+    print('returning data1') #temp for testing
     return data1  # returns information of songs
 
 #handles adding local songs to queue
@@ -110,17 +111,17 @@ async def downloadLocal(ctx):
         print(f"No files found in {download_dir}.")
         return []
 
-    # thePath = os.getenv('GORP')
+    # thePath = os.getenv('DLPATH')
     local_songs = []
     for file in files:
-        title = os.path.splitext(os.path.basename(file))[0]
-        if(title != '!downloads'):
+        localTitle = os.path.splitext(os.path.basename(file))[0]
+        if(localTitle != '!downloads'):
             # filepath = os.path.join(thePath, file)
             # filepath = filepath.replace("\\", "/")
             filepath = file.replace("\\", "/")
             local_songs.append([title, filepath])
 
-    print(f"Found {len(local_songs)} local files in {download_dir}.")
+    print(f"Found {len(local_songs)} local files in {download_dir}.") 
     return local_songs
         
 #method used to start playing songs
@@ -146,8 +147,8 @@ async def playNow(ctx, data, url):
             ctx.voice_client.play(discord.FFmpegPCMAudio(source=next_song[1], **ffmpeg_options), after=lambda e: after(e))
     #Starts playing of first song in queue
     print('starting voice_client.play')
-    print(url[0] + " url[0]")
-    print(url[1] + " url[1]")
+    print(url[0] + " url[0]") #temp for testing
+    print(url[1] + " url[1]") #temp for testing
     ctx.voice_client.play(discord.FFmpegPCMAudio(source=url[1], **ffmpeg_options), after=lambda e: after(e))
     
 #moves bot to user's vc
@@ -155,15 +156,15 @@ async def moveVC(ctx):
     print('in moveVC')
     voice_channel = ctx.author.voice.channel if ctx.author.voice else None
     if not voice_channel:
-        print('moveVC if not voice_channel')
+        print('moveVC if not voice_channel') #temp for testing
         await ctx.send("Not in vc stinky")
 
     if ctx.voice_client and ctx.voice_client.channel != voice_channel:
-        print('moveVC if ctx.voice_client')
+        print('moveVC if ctx.voice_client') #temp for testing
         await ctx.voice_client.move_to(voice_channel)
 
     else:
-        print('moveVC else')
+        print('moveVC else') #temp for testing
         await voice_channel.connect()
  
 #main class of bot
@@ -227,7 +228,7 @@ class Mandy(commands.Cog):
     #command to send the title of the currently playing song
     @commands.command()
     async def title(self, ctx):
-        await ctx.send(title)
+        await ctx.send(os.path.splitext(os.path.basename(title))[0]) #might not be correct, requires testing
         
 async def main():
     #loads token from .env file
