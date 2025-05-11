@@ -5,9 +5,12 @@ import os
 from discord.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+from nacl.secret import Aead
 
 """ TBD, order of priority
-    Test bot commands, skip might break if skipping last song and test title due to new implementation
+    Skip no worky
+    Name command Doesn't work properly
+    Test bot commands
     Don't download already downloaded songs, separate command to update pl
     Doesn't properly check if user is in vc, runs and downloads songs w/o user being in vc
     Create ReadMe
@@ -15,7 +18,6 @@ from dotenv import load_dotenv
     Test adjusting max_workers to larger numbers for potential performance improvements
 
 Reference: https://github.com/SpaceCowboyZZ/music-bot-yt-dlp/blob/main/main.py
-if errors, change Mandy back to music bot in class declaration and in main()
  """
 #sets bot permissions
 intents = discord.Intents.default() #sets defaults
@@ -29,6 +31,7 @@ bot = commands.Bot(command_prefix='!!', intents=intents)
 #global vars
 queue = [] #queue of songs
 title = None #save title of currently playing song for use in title command
+url = None
 bot.play_status = False #if bot is playing or not
 executor = ThreadPoolExecutor(max_workers=4) #num of concurrent processes, used when downloading songs
 
@@ -37,14 +40,13 @@ test= 'https://www.youtube.com/playlist?list=PLzFA48i-nuXYFLBJ86iFEuAeoH9yS3bRm'
 
 #main method to load bad music pl
 async def doBad(ctx):
-    moveVC(ctx) 
     await ctx.send(f'Making The Bad')
     #calls playlist method to move info about playlist into data1
     data1 = await playlist(ctx)
     data = data1.copy()
     #lines up songs in queue and calls playNow()
     queue.extend(data)
-    await playNow(ctx, data, url=queue.pop(0)) 
+    await playNow(ctx, data, queue) 
 
 #used for downloading playlist
 async def playlist(ctx):
@@ -53,8 +55,7 @@ async def playlist(ctx):
         'outtmpl': 'downloads/%(title)s.%(ext)s',
         'format': 'bestaudio/best',
         'ignoreerrors': True,
-        #saves list of downloaded songs to txt file, doesn't redownload, not currently used due to problems loading from file
-        'download_archive': 'downloads/!downloads.txt',
+        # 'download_archive': 'downloads/!downloads.txt',
         'playlistrandom': True,
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -65,21 +66,16 @@ async def playlist(ctx):
     
     playlist_search = yt_dlp.YoutubeDL(pl_opts)
     loop = asyncio.get_event_loop()
-    data = await loop.run_in_executor(executor, lambda: playlist_search.extract_info(url=PL, download=True))
-    data1 = []
+    data = await loop.run_in_executor(executor, lambda: playlist_search.extract_info(url=test, download=True))
     if 'entries' in data:
-        for entry in data['entries']:
-            if entry:
-                data1.append[[entry['title'], entry['url']]]
-            else:
-                title = entry['title']
-                url = f"downloads/{title}.mp3"
-                data1.append([title, url])
+        if 'entries' in data:
+            data1 = [[entry['title'], entry['url']] for entry in data['entries']]
     return data1 #returns information of songs
 
 #method used to start playing songs
-async def playNow(ctx, data, url):
-    moveVC(ctx)
+async def playNow(ctx, data, queue):
+    voice_client = await moveVC(ctx)
+    url = queue.pop(0)
     ffmpeg_options = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}   
     bot.play_status = True
     #Recursive method for playing songs after prev song ends
@@ -89,25 +85,41 @@ async def playNow(ctx, data, url):
                 
         if queue:
             #If songs in queue, lines up next song then plays
-            title = f'{next_song[0]}'
-            next_song = queue.pop(0)
-            ctx.voice_client.play(discord.FFmpegPCMAudio(next_song[1], **ffmpeg_options), after=lambda e: after(e))
+            url = queue.pop(0)
+            title = f'{url[0]}'
+            ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
         else:
             #if nothing in queue, reloads playlist from data and repeats
             queue.extend(data)
-            next_song = queue.pop(0)
-            ctx.voice_client.play(discord.FFmpegPCMAudio(next_song[1], **ffmpeg_options), after=lambda e: after(e))
+            url = queue.pop(0)
+            title = f'{url[0]}'
+            ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
     #Starts playing of first song in queue
-    title = f'{url[1]}'
+    title = f'{url[0]}'
     ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
     
 #moves bot to user's vc
 async def moveVC(ctx):
-    voice_channel = ctx.author.voice.channel if ctx.author.voice else None
-    if not voice_channel:
-        return await ctx.send("Not in vc stinky")
-    if not ctx.voice_client:
-        await voice_channel.connect()   
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if not voice_client:
+        if ctx.author.voice:
+            voice_channel = ctx.author.voice.channel
+            voice_client = await voice_channel.connect()
+            
+        elif not voice_client:
+            await ctx.send("Not in vc stinky")
+            
+    elif ctx.author.voice.channel != bot.in_chat:
+        print('Not in same vc')
+        return
+
+    return voice_client
+
+async def getTitle(ctx):
+    if title:
+        await ctx.send(title)
+    else:
+        await ctx.send("Nothing is playing")
 
 #main class of bot
 class Mandy(commands.Cog):
@@ -124,7 +136,7 @@ class Mandy(commands.Cog):
     @commands.command()
     async def skip(self, ctx):
         #if in vc and a song is loaded, stops curr song and starts next
-        if ctx.voice_client and (ctx.voice_client.is_playing() or ctx.voice_client.is_paused()):
+        if ctx.voice_client:
             #Try replacing w/ .stop() and see if it still causes problems
             ctx.voice_client.pause()
             await playNow(ctx, url = queue.pop(0))
@@ -169,8 +181,8 @@ class Mandy(commands.Cog):
 
     #command to send the title of the currently playing song
     @commands.command()
-    async def title(self, ctx):
-        await ctx.send(title)
+    async def name(self, ctx):
+        await getTitle(ctx)
         
 async def main():
     #loads token from .env file
