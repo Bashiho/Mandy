@@ -10,7 +10,7 @@ from nacl.secret import Aead
 """ TBD
     Maybe find a way to have stop > uhoh not require reconnecting to vc
     Don't download already downloaded songs, separate command to update pl
- 
+
     Reference: https://github.com/SpaceCowboyZZ/music-bot-yt-dlp/blob/main/main.py
 """
 #sets bot permissions
@@ -78,23 +78,23 @@ async def playNow(ctx, data, queue):
     def after(error):
         if error:
             print(error)
-            
+                
         if queue and not bot.stop:
             #If songs in queue, lines up next song then plays
             url = queue.pop(0)
             bot.songName = f'{url[0]}'
             ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
-            
+
         elif not bot.stop:
             #if nothing in queue, reloads playlist from data and repeats
             queue.extend(data)
             url = queue.pop(0)
             bot.songName = f'{url[0]}'
             ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
-            
+
         else: 
             return
-          
+
     #Starts playing of first song in queue
     bot.songName = f'{url[0]}'
     ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
@@ -102,6 +102,7 @@ async def playNow(ctx, data, queue):
 #moves bot to user's vc
 async def moveVC(ctx):
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
     voice_channel = ctx.author.voice.channel
     if ctx.author.voice:
         if bot.inChat != voice_channel:    
@@ -117,7 +118,7 @@ async def moveVC(ctx):
         return
     
     return voice_client
- 
+
 # Main class of bot
 class Mandy(commands.Cog):
     def __init__(self, client):
@@ -139,7 +140,6 @@ class Mandy(commands.Cog):
         if ctx.voice_client:
             await ctx.send("skipped")
             ctx.voice_client.stop()
-            
         else:
             await ctx.send('Not playing currently')
     
@@ -168,7 +168,7 @@ class Mandy(commands.Cog):
        
     @commands.command()
     async def stop(self, ctx):
-        voice_client, inVC = await checkVC(ctx)
+        voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
         if not voice_client:
             return
         bot.stop = True
@@ -178,10 +178,8 @@ class Mandy(commands.Cog):
             bot.play_status = False
             voice_client.stop()
             await voice_client.disconnect()
-        elif not bot.stop:
-            await ctx.send('Not playing anything')
         else:
-            await ctx.send("Bot is already stopped")
+            await ctx.send("Not playing anything")
 
     @commands.command()
     async def name(self, ctx):
