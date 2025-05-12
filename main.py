@@ -10,8 +10,7 @@ from nacl.secret import Aead
 """ TBD
     Maybe find a way to have stop > uhoh not require reconnecting to vc
     Don't download already downloaded songs, separate command to update pl
-    Create ReadMe
-
+ 
     Reference: https://github.com/SpaceCowboyZZ/music-bot-yt-dlp/blob/main/main.py
 """
 #sets bot permissions
@@ -47,7 +46,6 @@ async def doBad(ctx):
     else:
         await ctx.send("Not in vc stinky")
 
-#used for downloading playlist
 async def playlist(ctx):
     #settings for playlist downloads
     pl_opts = { #list of options https://github.com/ytdl-org/youtube-dl/blob/master/youtube_dl/YoutubeDL.py#L128-L278
@@ -71,32 +69,32 @@ async def playlist(ctx):
             data1 = [[entry['title'], entry['url']] for entry in data['entries']]
     return data1 #returns information of songs
 
-#method used to start playing songs
 async def playNow(ctx, data, queue):
     voice_client = await moveVC(ctx)
     url = queue.pop(0)
     ffmpeg_options = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}   
     bot.play_status = True
-    # global title
     #Recursive method for playing songs after prev song ends
     def after(error):
-        # global title
         if error:
             print(error)
-                
+            
         if queue and not bot.stop:
             #If songs in queue, lines up next song then plays
             url = queue.pop(0)
             bot.songName = f'{url[0]}'
             ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
+            
         elif not bot.stop:
             #if nothing in queue, reloads playlist from data and repeats
             queue.extend(data)
             url = queue.pop(0)
             bot.songName = f'{url[0]}'
             ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
+            
         else: 
             return
+          
     #Starts playing of first song in queue
     bot.songName = f'{url[0]}'
     ctx.voice_client.play(discord.FFmpegPCMAudio(url[1], **ffmpeg_options), after=lambda e: after(e))
@@ -104,7 +102,6 @@ async def playNow(ctx, data, queue):
 #moves bot to user's vc
 async def moveVC(ctx):
     voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    # if not voice_client:
     voice_channel = ctx.author.voice.channel
     if ctx.author.voice:
         if bot.inChat != voice_channel:    
@@ -120,22 +117,14 @@ async def moveVC(ctx):
         return
     
     return voice_client
-
-# Checks if user is in VC before doing anything
-async def checkVC(ctx):
-    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    if not voice_client or ctx.author.voice:
-        return voice_client, True
-    else:
-        return voice_client, False
-
-#main class of bot
+ 
+# Main class of bot
 class Mandy(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.queue = []
             
-    #loads and begins play of playlist of bad music, main function of Mandy       
+    # Loads and begins play of playlist of bad music, main function of Mandy       
     @commands.command()
     async def uhoh(self, ctx):
         await doBad(ctx)
@@ -150,9 +139,7 @@ class Mandy(commands.Cog):
         if ctx.voice_client:
             await ctx.send("skipped")
             ctx.voice_client.stop()
-            # await playNow(ctx, url = queue.pop(0))
-        #if not running and queue is empty, stops curr song and sets play_status to false
-        #Implement a way for it to reload playlist and continue playing
+            
         else:
             await ctx.send('Not playing currently')
     
@@ -199,7 +186,6 @@ class Mandy(commands.Cog):
     @commands.command()
     async def name(self, ctx):
         await ctx.send(ctx.bot.songName)
-
         
 async def main():
     #loads token from .env file
