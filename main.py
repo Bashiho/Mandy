@@ -7,13 +7,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from nacl.secret import Aead
 
-""" TBD, order of priority
-    When rerunning after stop, doesn't start play
+""" TBD
+    Maybe find a way to have stop > uhoh not require reconnecting to vc
     Don't download already downloaded songs, separate command to update pl
-    Doesn't properly check if user is in vc, runs and downloads songs w/o user being in vc
     Create ReadMe
-    Doesn't move to diff vc when reusing command
-    Test adjusting max_workers to larger numbers for potential performance improvements
 
     Reference: https://github.com/SpaceCowboyZZ/music-bot-yt-dlp/blob/main/main.py
 """
@@ -31,6 +28,7 @@ queue = []
 bot.songName = None
 bot.stop = False
 bot.play_status = False #if bot is playing or not
+bot.inChat = None
 executor = ThreadPoolExecutor(max_workers=4) #num of concurrent processes, used when downloading songs
 
 PL = 'https://www.youtube.com/playlist?list=PLIJH8L_jdxO8ingMAyaOj4cuvZW4Or8l5'
@@ -38,11 +36,10 @@ test= 'https://www.youtube.com/playlist?list=PLzFA48i-nuXYFLBJ86iFEuAeoH9yS3bRm'
 
 #main method to load bad music pl
 async def doBad(ctx):
-    voice_client, inVC = await checkVC(ctx)
-    if inVC:
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if ctx.author.voice:
         await ctx.send(f'Making The Bad')
         bot.stop = False
-        # Calls playlist method to move info about playlist into data1
         data1 = await playlist(ctx)
         data = data1.copy()
         queue.extend(data)
@@ -106,19 +103,22 @@ async def playNow(ctx, data, queue):
     
 #moves bot to user's vc
 async def moveVC(ctx):
-    voice_client, inVC = await checkVC(ctx)
-    if not voice_client:
-        if inVC:
-            voice_channel = ctx.author.voice.channel
+    voice_client = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    # if not voice_client:
+    voice_channel = ctx.author.voice.channel
+    if ctx.author.voice:
+        if bot.inChat != voice_channel:    
+            bot.inChat == voice_channel
             voice_client = await voice_channel.connect()
-            
-        else:
-            await ctx.send("Not in vc stinky")
-            
-    elif ctx.author.voice.channel != bot.in_chat:
-        print('Not in same vc')
+        
+    elif not voice_client:
+        await ctx.send("Not in vc stinky")
         return
 
+    elif bot.inChat != voice_channel:
+        await ctx.send("Not in same vc")
+        return
+    
     return voice_client
 
 # Checks if user is in VC before doing anything
@@ -184,12 +184,13 @@ class Mandy(commands.Cog):
         voice_client, inVC = await checkVC(ctx)
         if not voice_client:
             return
-        #if bot is playing, clears queue and curr song info and stops bot
+        bot.stop = True
+        #if bot is playing, clears queue and curr song info and stops playing
         if bot.play_status:
             queue = []
             bot.play_status = False
-            bot.stop = True
             voice_client.stop()
+            await voice_client.disconnect()
         elif not bot.stop:
             await ctx.send('Not playing anything')
         else:
