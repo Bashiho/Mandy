@@ -1,4 +1,6 @@
-discord.py
+discord.py[voice]
 yt-dlp
 asyncio
+legacy-cgi
 python-dotenv
+audioop-lts
