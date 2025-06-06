@@ -34,20 +34,20 @@ pip install -r Requirements.txt
 # you might be asked to update pip, if so, then run the command given to do so
 ```
 
-##Commands
-#Prefix
+# Commands
+## Prefix
 The default command prefix is "!!"
-#Uhoh
+## Uhoh
 "!!uhoh" will run the main function of Mandy. This will load the playlist via the link stored in "PL".
-#Link
+## Link
 "!!link" will cause the bot to send a message with the link to the playlist.
-#Skip
+## Skip
 "!!skip" will skip the current song and start the next song.
-#Pause
+## Pause
 "!!pause" will pause whatever is being played.
-#Play
+## Play
 "!!play" will resume play of whatever was playing.
-#Stop
+## Stop
 "!!stop" will cause the bot to stop what it is doing and leave vc.
-#Name
+## Name
 "!!name" will cause the bot to send a message with the title of the currently playing video.
